@@ -102,7 +102,7 @@ To set up and run the Accounting Management System, you'll need:
 
 - **Web Server:** A server environment to host and run PHP scripts.
 - **Database:** MySQL database to store accounting data.
-- **PHP:** Version X.X.X or later.
+- **PHP:** Version 6.0 or later.
 - **Bootstrap:** For responsive and modern UI components.
 - **jQuery:** JavaScript library for interactive elements.
 - **HTML and CSS:** For structuring and styling the user interface.
