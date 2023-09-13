@@ -7,10 +7,50 @@ function format_num($number){
 }
 $from = isset($_GET['from']) ? $_GET['from'] : date("Y-m-d",strtotime(date('Y-m-d')." -1 week"));
 $to = isset($_GET['to']) ? $_GET['to'] : date("Y-m-d");
+
+$queryOwnerCapital = "SELECT al.name, sum(ji.amount) capital FROM journal_items JI 
+                        JOIN journal_entries je ON je.id = ji.journal_id
+                        JOIN account_list AL ON AL.ID = JI.account_id
+                        WHERE JI.group_id = 5
+                        AND date(je.journal_date) < concat(YEAR('".date("Y-m-d" , strtotime($to))."') , '-01-01') 
+                        GROUP BY al.name";
+
+$ownersCapitalStart = (float) ($conn->query($queryOwnerCapital)->fetch_object()->capital ?? 0);
+
+$queryNetIncome = "SELECT sum(amount) net_income FROM (
+                        SELECT al.name, sum(ji.amount) amount FROM journal_items JI 
+                        JOIN journal_entries je ON je.id = ji.journal_id
+                        JOIN account_list AL ON AL.ID = JI.account_id
+                        WHERE JI.group_id in(2)
+                        AND date(je.journal_date) <= '{$to}' 
+                        GROUP BY al.name
+                        union all
+                        SELECT al.name, sum(ji.amount)*-1 amount FROM journal_items JI 
+                        JOIN journal_entries je ON je.id = ji.journal_id
+                        JOIN account_list AL ON AL.ID = JI.account_id
+                        WHERE JI.group_id in(3)
+                        AND date(je.journal_date) <= '{$to}' 
+                        GROUP BY al.name
+                    )AS tr";
+
+$netIncome = (float) ($conn->query($queryNetIncome)->fetch_object()->net_income ?? 0);
+
+$queryOwnersWithdrawals = "SELECT al.name, sum(ji.amount) owners_withdrawals FROM journal_items JI 
+                    JOIN journal_entries je ON je.id = ji.journal_id
+                    JOIN account_list AL ON AL.ID = JI.account_id
+                    WHERE AL.id = 15
+                    AND date(je.journal_date) <= '{$to}' 
+                    GROUP BY al.name;";
+
+$ownersWithdrawals = (float) ($conn->query($queryOwnersWithdrawals)->fetch_object()->owners_withdrawals ?? 0);
+
+$subtotal = $ownersCapitalStart + $netIncome;
+$total = $subtotal - $ownersWithdrawals;
+
 ?>
 <div class="card card-outline card-primary">
 	<div class="card-header">
-		<h3 class="card-title">Trial Balance</h3>
+		<h3 class="card-title">Owner's Equity</h3>
 		<div class="card-tools">
 		</div>
 	</div>
@@ -19,12 +59,12 @@ $to = isset($_GET['to']) ? $_GET['to'] : date("Y-m-d");
             <h4 class="text-muted">Filter Date</h4>
             <form action="" id="filter">
             <div class="row align-items-end">
-                <div class="col-md-4 form-group">
+                <!-- <div class="col-md-4 form-group">
                     <label for="from" class="control-label">Date From</label>
                     <input type="date" id="from" name="from" value="<?= $from ?>" class="form-control form-control-sm rounded-0">
-                </div>
+                </div> -->
                 <div class="col-md-4 form-group">
-                    <label for="to" class="control-label">Date To</label>
+                    <label for="to" class="control-label">Date</label>
                     <input type="date" id="to" name="to" value="<?= $to ?>" class="form-control form-control-sm rounded-0">
                 </div>
                 <div class="col-md-4 form-group">
@@ -41,77 +81,41 @@ $to = isset($_GET['to']) ? $_GET['to'] : date("Y-m-d");
             }
         </style>
             <h3 class="text-center"><b><?= $_settings->info('name') ?></b></h3>
-            <h4 class="text-center"><b>Trial Balance</b></h4>
-            <?php if($from == $to): ?>
-            <p class="m-0 text-center"><?= date("M d, Y" , strtotime($from)) ?></p>
-            <?php else: ?>
-            <p class="m-0 text-center"><?= date("M d, Y" , strtotime($from)). ' - '.date("M d, Y" , strtotime($to)) ?></p>
-            <?php endif; ?>
+            <h4 class="text-center"><b>Owner's Equity</b></h4>
+            <p class="m-0 text-center"><?= date("M d, Y" , strtotime($to)) ?></p>
             <hr>
-			<table class="table table-hover table-bordered">
-                <colgroup>
-					<col width="20%">
-					<col width="20%">
-					<col width="60%">
-				</colgroup>
-				<thead>
-					<tr>
-						<th>Date</th>
-						<th>Journal Code</th>
-						<td class="p-0">
-							<div class="d-flex w-100">
-								<div class="col-6 border">Description</div>
-								<div class="col-3 border">Debit</div>
-								<div class="col-3 border">Credit</div>
-							</div>
-						</td>
-					</tr>
-				</thead>
-                <tbody>
-					<?php 
-					$total_debit = 0;
-					$total_credit = 0;
-					$journals = $conn->query("SELECT * FROM `journal_entries` where date(journal_date) BETWEEN '{$from}' and '{$to}' order by date(journal_date) asc");
-					while($row = $journals->fetch_assoc()):
-					?>
-					<tr>
-						<td class="text-center"><?= date("M d, Y", strtotime($row['journal_date'])) ?></td>
-						<td class=""><?= $row['code'] ?></td>
-						<td class="p-0">
-							<div class="d-flex w-100">
-								<div class="col-6 border"><?= $row['description'] ?></div>
-								<div class="col-3 border"></div>
-								<div class="col-3 border"></div>
-							</div>
-							<?php 
-							$jitems = $conn->query("SELECT j.*,a.name as account, g.type as `type` FROM `journal_items` j inner join account_list a on j.account_id = a.id inner join group_list g on j.group_id = g.id where j.journal_id = '{$row['id']}'");
-							while($rowss = $jitems->fetch_assoc()):
-                                if($rowss['type'] == 1)
-                                    $total_debit += $rowss['amount'];
-                                else
-                                    $total_credit += $rowss['amount'];
-							?>
-							<div class="d-flex w-100">
-								<div class="col-6 border"><span class="pl-4"><?= $rowss['account'] ?></span></div>
-								<div class="col-3 border text-right"><?= $rowss['type'] == 1 ? format_num($rowss['amount']) : '' ?></div>
-								<div class="col-3 border text-right"><?= $rowss['type'] == 2 ? format_num($rowss['amount']) : '' ?></div>
-							</div>
-							<?php endwhile; ?>
-						</td>
-					</tr>
-					<?php endwhile; ?>
-				</tbody>
-                <tfoot>
-                    <th colspan="2" class="text-center"></th>
-                    <th class="text-right p-0">
-                        <div class="d-flex w-100">
-                            <div class="col-6 border text-center">Total</span></div>
-                            <div class="col-3 border text-right"><?= format_num($total_debit) ?></div>
-                            <div class="col-3 border text-right"><?= format_num($total_credit) ?></div>
-                        </div>
-                    </th>
-                </tfoot>
-			</table>
+			<div class="col-md-12">
+                <table class="table table-hover table-bordered">
+                    
+                        <colgroup>
+                        <col width="70%">
+                        <col width="30%">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th class="py-1 px-2 align-middle" >Capital</th>
+                                <th class="py-1 px-2 align-middle" ><?= format_num($ownersCapitalStart); ?></th>
+                            </tr>
+                            <tr>
+                                <th class="py-1 px-2 align-middle" >Net Income</th>
+                                <th class="py-1 px-2 align-middle" ><?= format_num($netIncome); ?></th>
+                            </tr>
+                            <tr>
+                                <th class="py-1 px-2 align-middle" >Subtotal</th>
+                                <th class="py-1 px-2 align-middle" ><?= format_num($subtotal); ?></th>
+                            </tr>
+                            <tr>
+                                <th class="py-1 px-2 align-middle" >Owner's Drawings</th>
+                                <th class="py-1 px-2 align-middle" ><?= format_num($ownersWithdrawals); ?></th>
+                            </tr>
+                        </thead>
+                </table>
+            </div>
+            <div class='row'>
+                <div class="col-md-4">
+                    <h1>Capital Till Date: <?= format_num($total)?></h1>
+                </div>
+            </div>
 		</div>
 	</div>
 </div>
@@ -119,14 +123,14 @@ $to = isset($_GET['to']) ? $_GET['to'] : date("Y-m-d");
 	$(document).ready(function(){
         $('#filter').submit(function(e){
             e.preventDefault()
-            location.href="./?page=reports/trial_balance&"+$(this).serialize();
+            location.href="./?page=reports/owners_equity&"+$(this).serialize();
         })
         $('#print').click(function(){
             start_loader()
             var _h = $('head').clone();
             var _p = $('#outprint').clone();
             var el = $('<div>')
-            _h.find('title').text('Trial Balance - Print View')
+            _h.find('title').text('Owner\'s Equity - Print View')
             _h.append('<style>html,body{ min-height: unset !important;}</style>')
             el.append(_h)
             el.append(_p)

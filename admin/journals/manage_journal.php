@@ -156,10 +156,11 @@ function format_num($number){
         var credit = 0;
         $('#account_list tbody tr').each(function(){
             if($(this).find('.debit_amount').text() != "")
-                debit += parseFloat(($(this).find('.debit_amount').text()).replace(/,/gi,''));
+                debit += parseFloat((($(this).find('.debit_amount').text()).replace(/,/gi,'')).replace('$',''));
             if($(this).find('.credit_amount').text() != "")
-                credit += parseFloat(($(this).find('.credit_amount').text()).replace(/,/gi,''));
+                credit += parseFloat((($(this).find('.credit_amount').text()).replace(/,/gi,'')).replace('$',''));
         })
+
         $('#account_list').find('.total_debit').text(parseFloat(debit).toLocaleString('en-US',{style:'decimal'}))
         $('#account_list').find('.total_credit').text(parseFloat(credit).toLocaleString('en-US',{style:'decimal'}))
         $('#account_list').find('.total-balance').text(parseFloat(debit - credit).toLocaleString('en-US',{style:'decimal'}))
